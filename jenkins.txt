@@ -1,0 +1,113 @@
+sudo apt update
+
+sudo apt install openjdk-11-jdk -y
+
+curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | sudo tee \
+  /usr/share/keyrings/jenkins-keyring.asc > /dev/null
+
+echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
+  https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+  /etc/apt/sources.list.d/jenkins.list > /dev/null
+
+sudo apt-get update
+sudo apt-get install jenkins
+
+*****************************************************
+Launch EC2 instance for Jenkins server and create 
+security groups 
+ssh 22 myip
+customTCP 8080 anywhere 
+
+Check whether the service is running or not 
+ssh -i Downloads/jenkins1-key.pem ubuntu@<publicip>
+systemctl stauts jenkins
+publicip:8080
+
+Launch EC2 instance for Nexus server and create 
+security groups 
+ssh 22 myip
+customTCP 8081 anywhere 
+customTCP 8080 jenkins server
+
+Check whether the service is running or not  
+ssh -i Downloads/nexus-key.pem ec2-user@<publicip>
+systemctl stauts nexus
+publicip:8081
+
+Launch EC2 instance for Sonar server and create 
+security groups 
+ssh 22 myip
+customTCP  anywhere 
+customTCP  jenkins server
+
+Check whether the service is running or not 
+ssh -i Downloads/sonar-key.pem ec2-user@<publicip>
+systemctl stauts sonar
+publicip
+
+*********************************************
+Install all default plugins in jenkins
+Add required plugins for required functionality
+
+Open jenkins server
+create new job pipeline project
+paste the following pipeline (CI) code  below to fetch code, build it, analyse it and test it and create reports from and upload to sonar server
+pipeline{
+	agent any
+	tools{
+		maven "MAVEN3"
+		jdk "OracleJDK11"
+	     }
+	stages{
+		stage('Fetch Code'){
+			steps{
+				git branch:'main',url:'https://github.com/hkhcoder/vprofile-project.git'
+			     }
+	      			   }
+	     
+		stage('Build'){
+			steps{
+				sh 'mvn install -DskipTests'
+			      }
+			post{
+				success{
+					echo 'archiving artifacts now'
+					archiveArtifacts artifacts:'**/*.war'
+					}
+			    }
+			      } 
+		stage('UNIT TESTS'){
+			steps{
+				sh 'mvn test'
+			     }
+				   }
+		stage('Checkstyle Analysis'){
+			steps{
+				sh 'mvn checkstyle:checkstyle'
+			     }
+					    }
+		stage('Sonar Analysis'){
+			environment{
+				scannerHome = tool 'sonar4.7'
+				   }
+			steps{
+				withSonarQubeEnv('sonar') {
+                		sh '''${scannerHome}/bin/sonar-scanner-Dsonar.projectKey=vprofile \ 
+					-DsonarprojectKey=vprofile \
+					-Dsonar.projectName=vprofile \
+					-Dsonar.projectVersion=1.0 \
+					-Dsonar.sources=src/ \
+					-Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
+					-Dsonar.junit.reportsPath=target/surefire-reports/ \
+					-Dsonar.jacoco.reportsPath=target/jacoco.exec \
+					-Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+              		     }
+				
+			}
+		}
+	}
+}
+
+
+
+
